@@ -35,6 +35,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // Without an autosaveName, macOS doesn't remember a dragged position
+        // across the item disappearing and reappearing (isVisible toggling
+        // below) — it just re-inserts wherever. This keys the position to a
+        // stable name so a manual drag sticks across connect/disconnect.
+        statusItem.autosaveName = "SonyConnectStatusItem"
         super.init()
         configureStatusButton()
         configureMenu()
