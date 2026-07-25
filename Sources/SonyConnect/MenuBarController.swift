@@ -22,6 +22,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let ncOnItem = NSMenuItem(title: "Noise Cancelling", action: nil, keyEquivalent: "")
     private let ncAmbientItem = NSMenuItem(title: "Ambient Sound", action: nil, keyEquivalent: "")
     private let ncOffItem = NSMenuItem(title: "Off", action: nil, keyEquivalent: "")
+    private let ambientSettingsMenuItem = NSMenuItem(title: "Ambient Sound Settings", action: nil, keyEquivalent: "")
+    private let ambientSettingsSubmenu = NSMenu(title: "Ambient Sound Settings")
+    private let ambientLevelMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let ambientLevelSlider = NSSlider()
+    private let focusOnVoiceMenuItem = NSMenuItem(title: "Focus on Voice", action: nil, keyEquivalent: "")
     private let speakToChatMenuItem = NSMenuItem(title: "Speak-to-Chat: —", action: nil, keyEquivalent: "")
     private let autoOffMenuItem = NSMenuItem(title: "Power Off after 30 min idle", action: nil, keyEquivalent: "")
     private let powerOffMenuItem = NSMenuItem(title: "Power Off Headphones", action: nil, keyEquivalent: "")
@@ -103,6 +108,16 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             item.tag = tag
             ncSubmenu.addItem(item)
         }
+        ncSubmenu.addItem(.separator())
+        configureAmbientLevelItem()
+        ambientSettingsSubmenu.addItem(ambientLevelMenuItem)
+        ambientSettingsSubmenu.addItem(.separator())
+        focusOnVoiceMenuItem.target = self
+        focusOnVoiceMenuItem.action = #selector(toggleFocusOnVoice)
+        ambientSettingsSubmenu.addItem(focusOnVoiceMenuItem)
+        ambientSettingsMenuItem.submenu = ambientSettingsSubmenu
+        ncSubmenu.addItem(ambientSettingsMenuItem)
+
         ncParentMenuItem.submenu = ncSubmenu
         popupMenu.addItem(ncParentMenuItem)
 
@@ -172,6 +187,42 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         volumeController.setVolume(Float(sender.doubleValue))
     }
 
+    private func configureAmbientLevelItem() {
+        let width: CGFloat = 230
+        let height: CGFloat = 26
+        let leftInset: CGFloat = 38
+        let rightInset: CGFloat = 14
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        container.autoresizingMask = [.width]
+
+        let icon = NSImageView(frame: NSRect(x: 14, y: 5, width: 16, height: 16))
+        icon.image = NSImage(systemSymbolName: "dot.radiowaves.left.and.right",
+                             accessibilityDescription: "Ambient Sound Level")
+        icon.contentTintColor = .secondaryLabelColor
+        icon.autoresizingMask = [.maxXMargin]
+        container.addSubview(icon)
+
+        ambientLevelSlider.frame = NSRect(x: leftInset, y: 3,
+                                          width: width - leftInset - rightInset, height: 20)
+        ambientLevelSlider.autoresizingMask = [.width]
+        ambientLevelSlider.minValue = 0
+        ambientLevelSlider.maxValue = Double(HeadphonesController.maxAmbientLevel)
+        ambientLevelSlider.isContinuous = false   // commit on mouse-up, don't flood RFCOMM
+        ambientLevelSlider.target = self
+        ambientLevelSlider.action = #selector(ambientLevelChanged(_:))
+        container.addSubview(ambientLevelSlider)
+
+        ambientLevelMenuItem.view = container
+    }
+
+    @objc private func ambientLevelChanged(_ sender: NSSlider) {
+        controller.setAmbientLevel(sender.integerValue)
+    }
+
+    @objc private func toggleFocusOnVoice() {
+        controller.setAmbientFocusOnVoice(focusOnVoiceMenuItem.state != .on)
+    }
+
     private func refreshVolumeItem(reachable: Bool) {
         if reachable, let vol = volumeController.currentVolume() {
             volumeSlider.floatValue = vol
@@ -215,11 +266,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusMenuItem.title = state.statusDescription
         autoOffMenuItem.state = state.autoOffEnabled ? .on : .off
 
-        // Dim the menu-bar icon only when the headphones are actually
-        // unreachable (off / out of range). While they're present but our
-        // SPP channel is closed for battery saving ("idle"), the icon
-        // stays normal. appearsDisabled is cosmetic — button stays clickable.
-        statusItem.button?.appearsDisabled = !state.deviceReachable
+        // Only show the menu-bar icon while the headphones are present at
+        // the BT level. While they're present but our SPP channel is closed
+        // for battery saving ("idle"), the icon stays visible and normal.
+        statusItem.isVisible = state.deviceReachable
+        statusItem.button?.appearsDisabled = false
 
         if let level = state.batteryLevel {
             let suffix = state.batteryCharging ? " (charging)" : ""
@@ -253,6 +304,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             touchMenuItem.isEnabled = false
             ncParentMenuItem.title = "Noise Cancelling: —"
             ncParentMenuItem.isEnabled = false
+            ambientSettingsMenuItem.isEnabled = false
+            focusOnVoiceMenuItem.isEnabled = false
             speakToChatMenuItem.title = "Speak-to-Chat: —"
             speakToChatMenuItem.state = .off
             speakToChatMenuItem.isEnabled = false
@@ -290,6 +343,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         ncOnItem.state = state.ncMode == .noiseCancelling ? .on : .off
         ncAmbientItem.state = state.ncMode == .ambient ? .on : .off
         ncOffItem.state = state.ncMode == .off ? .on : .off
+
+        // Ambient Sound settings (level slider + Focus on Voice) only make
+        // sense while Ambient mode is actually active on the device.
+        let ambientActive = state.ncMode == .ambient
+        ambientSettingsMenuItem.isEnabled = ambientActive
+        ambientLevelSlider.integerValue = state.ambientLevel
+        focusOnVoiceMenuItem.isEnabled = ambientActive
+        focusOnVoiceMenuItem.state = state.ambientFocusOnVoice ? .on : .off
 
         // Speak-to-Chat
         speakToChatMenuItem.isEnabled = state.speakToChatEnabled != nil
