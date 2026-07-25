@@ -25,7 +25,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let ambientSettingsMenuItem = NSMenuItem(title: "Ambient Sound Settings", action: nil, keyEquivalent: "")
     private let ambientSettingsSubmenu = NSMenu(title: "Ambient Sound Settings")
     private let ambientLevelMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let ambientLevelSlider = NSSlider()
+    private let ambientLevelSlider = ScrollableSlider()
     private let focusOnVoiceMenuItem = NSMenuItem(title: "Focus on Voice", action: nil, keyEquivalent: "")
     private let speakToChatMenuItem = NSMenuItem(title: "Speak-to-Chat: —", action: nil, keyEquivalent: "")
     private let autoOffMenuItem = NSMenuItem(title: "Power Off after 30 min idle", action: nil, keyEquivalent: "")
@@ -194,28 +194,47 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func configureAmbientLevelItem() {
         let width: CGFloat = 230
-        let height: CGFloat = 26
+        let height: CGFloat = 40
         let leftInset: CGFloat = 38
         let rightInset: CGFloat = 14
         let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         container.autoresizingMask = [.width]
 
-        let icon = NSImageView(frame: NSRect(x: 14, y: 5, width: 16, height: 16))
+        let icon = NSImageView(frame: NSRect(x: 14, y: 19, width: 16, height: 16))
         icon.image = NSImage(systemSymbolName: "dot.radiowaves.left.and.right",
                              accessibilityDescription: "Ambient Sound Level")
         icon.contentTintColor = .secondaryLabelColor
         icon.autoresizingMask = [.maxXMargin]
         container.addSubview(icon)
 
-        ambientLevelSlider.frame = NSRect(x: leftInset, y: 3,
-                                          width: width - leftInset - rightInset, height: 20)
+        ambientLevelSlider.frame = NSRect(x: leftInset, y: 15,
+                                          width: width - leftInset - rightInset, height: 24)
         ambientLevelSlider.autoresizingMask = [.width]
         ambientLevelSlider.minValue = 0
         ambientLevelSlider.maxValue = Double(HeadphonesController.maxAmbientLevel)
         ambientLevelSlider.isContinuous = false   // commit on mouse-up, don't flood RFCOMM
+        // One tick per integer step so drags snap and the notches are
+        // visible, matching the official app's stepped feel.
+        ambientLevelSlider.numberOfTickMarks = Int(HeadphonesController.maxAmbientLevel) + 1
+        ambientLevelSlider.allowsTickMarkValuesOnly = true
+        ambientLevelSlider.tickMarkPosition = .below
         ambientLevelSlider.target = self
         ambientLevelSlider.action = #selector(ambientLevelChanged(_:))
         container.addSubview(ambientLevelSlider)
+
+        let minLabel = NSTextField(labelWithString: "0")
+        minLabel.font = .systemFont(ofSize: 9)
+        minLabel.textColor = .secondaryLabelColor
+        minLabel.frame = NSRect(x: leftInset, y: 2, width: 24, height: 11)
+        container.addSubview(minLabel)
+
+        let maxLabel = NSTextField(labelWithString: "\(Int(HeadphonesController.maxAmbientLevel))")
+        maxLabel.font = .systemFont(ofSize: 9)
+        maxLabel.textColor = .secondaryLabelColor
+        maxLabel.alignment = .right
+        maxLabel.frame = NSRect(x: width - rightInset - 24, y: 2, width: 24, height: 11)
+        maxLabel.autoresizingMask = [.minXMargin]
+        container.addSubview(maxLabel)
 
         ambientLevelMenuItem.view = container
     }
