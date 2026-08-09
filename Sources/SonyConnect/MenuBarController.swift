@@ -31,7 +31,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let autoOffMenuItem = NSMenuItem(title: "Power Off after 30 min idle", action: nil, keyEquivalent: "")
     private let powerOffMenuItem = NSMenuItem(title: "Power Off Headphones", action: nil, keyEquivalent: "")
     private let reconnectMenuItem = NSMenuItem(title: "Reconnect", action: nil, keyEquivalent: "r")
+    private let hideIconMenuItem = NSMenuItem(title: "Hide Icon When Disconnected", action: nil, keyEquivalent: "")
     private let openLogMenuItem = NSMenuItem(title: "Open Log…", action: nil, keyEquivalent: "")
+
+    private static let hideIconDefaultsKey = "HideIconWhenDisconnected"
+    private static var hideIconWhenDisconnected: Bool {
+        get { UserDefaults.standard.bool(forKey: hideIconDefaultsKey) }
+        set { UserDefaults.standard.set(newValue, forKey: hideIconDefaultsKey) }
+    }
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -145,6 +152,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         reconnectMenuItem.target = self
         reconnectMenuItem.action = #selector(reconnect)
         popupMenu.addItem(reconnectMenuItem)
+
+        hideIconMenuItem.target = self
+        hideIconMenuItem.action = #selector(toggleHideIcon)
+        popupMenu.addItem(hideIconMenuItem)
 
         openLogMenuItem.target = self
         openLogMenuItem.action = #selector(openLog)
@@ -290,11 +301,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusMenuItem.title = state.statusDescription
         autoOffMenuItem.state = state.autoOffEnabled ? .on : .off
 
-        // Only show the menu-bar icon while the headphones are present at
-        // the BT level. While they're present but our SPP channel is closed
-        // for battery saving ("idle"), the icon stays visible and normal.
-        statusItem.isVisible = state.deviceReachable
-        statusItem.button?.appearsDisabled = false
+        // Default: the icon stays put and dims while the headphones are
+        // unreachable — Quit has to stay clickable since there's no Dock icon.
+        // Hiding the icon entirely is opt-in (defaults write com.tanat.sonyconnect
+        // HideIconWhenDisconnected -bool YES, or the toggle below): it looks
+        // tidier, but while hidden the app is only reachable again by
+        // reconnecting the headphones or flipping the default back.
+        hideIconMenuItem.state = Self.hideIconWhenDisconnected ? .on : .off
+        if Self.hideIconWhenDisconnected {
+            statusItem.isVisible = state.deviceReachable
+            statusItem.button?.appearsDisabled = false
+        } else {
+            statusItem.isVisible = true
+            statusItem.button?.appearsDisabled = !state.deviceReachable
+        }
 
         if let level = state.batteryLevel {
             let suffix = state.batteryCharging ? " (charging)" : ""
@@ -432,6 +452,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func reconnect() {
         controller.connect()
+    }
+
+    @objc private func toggleHideIcon() {
+        Self.hideIconWhenDisconnected.toggle()
+        render(state: controller.state)
     }
 
     @objc private func openLog() {
