@@ -107,8 +107,17 @@ final class HeadphonesController {
         }
         policy.onShouldConnect = { [weak self] in self?.bluetooth.connect() }
         policy.onShouldDisconnect = { [weak self] in
+            guard let self = self else { return }
+            // If auto-power-off is armed, keep the SPP channel open so its
+            // 30-minute idle timer can actually reach the device and send
+            // the power-off command. Otherwise the 5-minute battery-saver
+            // disconnect would kill the timer first.
+            if self.autoOff.isEnabled {
+                FileLogger.shared.log("policy", "idle disconnect skipped — auto-power-off armed")
+                return
+            }
             FileLogger.shared.log("policy", "disconnecting RFCOMM to save headphones battery")
-            self?.bluetooth.disconnect()
+            self.bluetooth.disconnect()
         }
         bluetooth.onReachabilityChange = { [weak self] reachable, name in
             self?.handleReachability(reachable, name: name)
